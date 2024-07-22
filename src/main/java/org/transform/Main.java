@@ -24,27 +24,32 @@ import java.util.Map;
 
 public class Main {
     public static void main(String[] args) throws FileNotFoundException {
-        Model defaultModel = ModelFactory.createDefaultModel();
-        System.out.println("Reading");
+        Model schema = RDFDataMgr.loadModel("https://swat.cse.lehigh.edu/onto/univ-bench.owl");
+        Reasoner reasoner = ReasonerRegistry.getOWLReasoner().bindSchema(schema);
+
+        System.out.println("Reasoning");
+        new File("./temp").mkdirs();
         FileUtils.iterateFiles(new File("./"), new String[]{"owl"}, false).forEachRemaining(file -> {
             final Model model = RDFDataMgr.loadModel(file.getAbsolutePath());
-
-            defaultModel.add(model);
+            InfModel infmodel = ModelFactory.createInfModel(reasoner, model);
+            try {
+                System.out.println(file.getName());
+                RDFDataMgr.write(new FileOutputStream("./temp/" + file.getName() + ".jsonld"), infmodel, RDFFormat.JSONLD11_FLAT);
+            } catch (FileNotFoundException e) {
+                throw new RuntimeException(e);
+            }
         });
 
-        System.out.println("Attaching reasoning");
-
-        Model schema = RDFDataMgr.loadModel("https://swat.cse.lehigh.edu/onto/univ-bench.owl");
-        Reasoner reasoner = ReasonerRegistry.getOWLReasoner();
-        reasoner = reasoner.bindSchema(schema);
-
-        InfModel infmodel = ModelFactory.createInfModel(reasoner, defaultModel);
-
+        System.out.println("Merging JSONLD");
         new File("./out").mkdirs();
-        System.out.println("Writing JSONLD");
-        RDFDataMgr.write(new FileOutputStream("./out/data_infer.jsonld"), infmodel, RDFFormat.JSONLD11_FLAT);
+        Model defaultModel = ModelFactory.createDefaultModel();
+        FileUtils.iterateFiles(new File("./temp/"), new String[]{"jsonld"}, false).forEachRemaining(file -> {
+            final Model model = RDFDataMgr.loadModel(file.getAbsolutePath());
+            defaultModel.add(model);
+        });
+        RDFDataMgr.write(new FileOutputStream("./out/data_infer.jsonld"), defaultModel, RDFFormat.JSONLD11_FLAT);
 
-        System.out.println("Converting JSONLD");
+        System.out.println("Formatting JSONLD");
         try {
             Map<String, Boolean> config = new HashMap<>();
             config.put(JsonGenerator.PRETTY_PRINTING, true);
@@ -60,6 +65,6 @@ public class Main {
         }
 
         System.out.println("Writing NT");
-        RDFDataMgr.write(new FileOutputStream("./out/data_infer.nt"), infmodel, Lang.NT);
+        RDFDataMgr.write(new FileOutputStream("./out/data_infer.nt"), defaultModel, Lang.NT);
     }
 }
