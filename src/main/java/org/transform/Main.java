@@ -24,12 +24,15 @@ import java.util.Map;
 
 public class Main {
     public static void main(String[] args) throws FileNotFoundException {
+        String inPath = args[0];
+        String outPath = args[1];
         Model schema = RDFDataMgr.loadModel("https://swat.cse.lehigh.edu/onto/univ-bench.owl");
         Reasoner reasoner = ReasonerRegistry.getOWLReasoner().bindSchema(schema);
 
         System.out.println("Reasoning");
-        new File("./temp").mkdirs();
-        FileUtils.iterateFiles(new File("./"), new String[]{"owl"}, false).forEachRemaining(file -> {
+        File temp = new File("./temp");
+        temp.mkdirs();
+        FileUtils.iterateFiles(new File(inPath), new String[]{"owl"}, false).forEachRemaining(file -> {
             final Model model = RDFDataMgr.loadModel(file.getAbsolutePath());
             InfModel infmodel = ModelFactory.createInfModel(reasoner, model);
             try {
@@ -41,13 +44,13 @@ public class Main {
         });
 
         System.out.println("Merging JSONLD");
-        new File("./out").mkdirs();
+        new File(outPath).mkdirs();
         Model defaultModel = ModelFactory.createDefaultModel();
         FileUtils.iterateFiles(new File("./temp/"), new String[]{"jsonld"}, false).forEachRemaining(file -> {
             final Model model = RDFDataMgr.loadModel(file.getAbsolutePath());
             defaultModel.add(model);
         });
-        RDFDataMgr.write(new FileOutputStream("./out/data_infer.jsonld"), defaultModel, RDFFormat.JSONLD11_FLAT);
+        RDFDataMgr.write(new FileOutputStream(outPath + "/data_infer.jsonld"), defaultModel, RDFFormat.JSONLD11_FLAT);
 
         System.out.println("Formatting JSONLD");
         try {
@@ -55,16 +58,22 @@ public class Main {
             config.put(JsonGenerator.PRETTY_PRINTING, true);
             JsonWriterFactory writerFactory = Json.createWriterFactory(config);
 
-            JsonArray expanded = JsonLd.expand(JsonDocument.of(new FileInputStream("./out/data_infer.jsonld"))).get();
-            writerFactory.createWriter(new FileOutputStream("./out/data_infer_exp.jsonld")).write(expanded);
+            JsonArray expanded = JsonLd.expand(JsonDocument.of(new FileInputStream(outPath + "/data_infer.jsonld"))).get();
+            writerFactory.createWriter(new FileOutputStream(outPath + "/data_infer_exp.jsonld")).write(expanded);
 
-            JsonStructure flattened = JsonLd.flatten(JsonDocument.of(new FileInputStream("./out/data_infer.jsonld"))).get();
-            writerFactory.createWriter(new FileOutputStream("./out/data_infer_fla.jsonld")).write(flattened);
+            JsonStructure flattened = JsonLd.flatten(JsonDocument.of(new FileInputStream(outPath + "/data_infer.jsonld"))).get();
+            writerFactory.createWriter(new FileOutputStream(outPath + "/data_infer_fla.jsonld")).write(flattened);
+
+            FileUtils.deleteDirectory(temp);
         } catch (JsonLdError e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
         System.out.println("Writing NT");
-        RDFDataMgr.write(new FileOutputStream("./out/data_infer.nt"), defaultModel, Lang.NT);
+        RDFDataMgr.write(new FileOutputStream(outPath + "/data_infer.nt"), defaultModel, Lang.NT);
+
+        System.out.println("Finished");
     }
 }
